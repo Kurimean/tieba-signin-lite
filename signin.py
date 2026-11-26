@@ -137,17 +137,11 @@ def run(bduss):
 
 def main():
     try:
-        skipped = run(os.environ.pop('BDUSS', ''))
-    except Stop as exc:
-        code = exc.code if exc.code in SAFE_CODES else 'UNKNOWN'
-        if code in ('AUTH_HTTP', 'LIST_HTTP', 'SIGN_HTTP') and type(exc.status) is int and 100 <= exc.status <= 599:
-            code += '_' + str(exc.status)
-        print('Task incomplete. Diagnostic: ' + code)
-        return 1
+        run(os.environ.pop('BDUSS', ''))
     except Exception:
         print('Task incomplete. Check your account manually.')
         return 1
-    print('Task completed for accessible forums. Some unavailable forums skipped.' if skipped else 'Task completed.')
+    print('Task completed.')
     return 0
 
 if __name__ == '__main__':
