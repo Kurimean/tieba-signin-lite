@@ -5,8 +5,8 @@ import subprocess
 import sys
 import time
 
-WINDOW_SECONDS = 300
-WORK_LIMIT_SECONDS = 280
+WINDOW_SECONDS = 930
+WORK_LIMIT_SECONDS = 900
 
 
 def run_slot(secret, required=False):
