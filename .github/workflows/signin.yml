@@ -8,9 +8,12 @@ on:
         description: Run without privacy time padding
         type: boolean
         default: true
+  push:
+    branches: [main]
+    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
-  group: daily-task
+  group: ${{ github.event_name == 'push' && 'offline-validation' || 'daily-task' }}
   cancel-in-progress: false
 jobs:
   run:
