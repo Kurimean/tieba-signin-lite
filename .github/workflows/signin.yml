@@ -1,0 +1,30 @@
+name: Daily task
+on:
+  schedule:
+    - cron: '30 22 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: daily-task
+  cancel-in-progress: false
+jobs:
+  run:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Fetch public source at exact revision
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --quiet --depth=1 origin "$REVISION"
+          git checkout --quiet --detach FETCH_HEAD
+      - name: Run offline tests
+        run: python3 -B -m unittest -q test_signin
+      - name: Daily task
+        env:
+          BDUSS: ${{ secrets.BDUSS }}
+        run: python3 -I -B signin.py
