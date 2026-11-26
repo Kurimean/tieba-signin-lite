@@ -1,4 +1,4 @@
-"""Run sign-in with a bounded, padded execution window and no child output."""
+"""Run two isolated account slots, with constant time and aggregate output."""
 import os
 import pathlib
 import subprocess
@@ -9,10 +9,9 @@ WINDOW_SECONDS = 300
 WORK_LIMIT_SECONDS = 280
 
 
-def main():
+def run_slot(secret, required=False):
     started = time.monotonic()
-    secret = os.environ.pop('BDUSS', '')
-    success = False
+    success = not required
     try:
         if secret:
             result = subprocess.run(
@@ -26,8 +25,22 @@ def main():
         success = False
     finally:
         secret = None
-        remaining = max(0.0, WINDOW_SECONDS - (time.monotonic() - started))
-        time.sleep(remaining)
+        time.sleep(max(0.0, WINDOW_SECONDS - (time.monotonic() - started)))
+    return success
+
+
+def main():
+    first = os.environ.pop('BDUSS', '')
+    second = os.environ.pop('BDUSS_SECOND', '')
+    # The workflow falls back to the first secret for an unconfigured slot.
+    # Never sign the same credential twice; still pad the unused slot.
+    if second == first:
+        second = ''
+    first_ok = run_slot(first, required=True)
+    first = None
+    second_ok = run_slot(second)
+    second = None
+    success = first_ok and second_ok
     print('Task completed.' if success else 'Task incomplete.')
     return 0 if success else 1
 
