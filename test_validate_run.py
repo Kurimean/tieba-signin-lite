@@ -22,6 +22,7 @@ class ValidationTests(unittest.TestCase):
                 self.assertEqual(call.kwargs['stdout'], subprocess.DEVNULL)
                 self.assertEqual(call.kwargs['stderr'], subprocess.DEVNULL)
                 self.assertEqual(set(call.kwargs['env']), {'BDUSS', 'PATH'})
+                self.assertEqual(call.kwargs['timeout'], 900)
             return rc, buf.getvalue(), run.call_count
 
     def test_success(self):
@@ -39,7 +40,7 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(self.simulate('one', 'two', [11, 0]), expected)
 
     def test_timeout_no_secret(self):
-        self.assertEqual(self.simulate('one', 'two', [subprocess.TimeoutExpired('private', 280), 0]),
+        self.assertEqual(self.simulate('one', 'two', [subprocess.TimeoutExpired('private', 900), 0]),
                          (1, 'Validation incomplete. TIMEOUT\n', 2))
 
     def test_diagnostic_exit_codes(self):
