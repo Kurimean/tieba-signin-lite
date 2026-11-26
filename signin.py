@@ -6,7 +6,7 @@ import os
 import re
 import ssl
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin, urlsplit
 
 TBS = ('tieba.baidu.com', '/dc/common/tbs')
 LIKE = ('c.tieba.baidu.com', '/c/f/forum/like')
@@ -25,7 +25,8 @@ SAFE_CODES = {'SECRET_MISSING', 'SECRET_FORMAT', 'AUTH_REJECTED', 'AUTH_SCHEMA',
               'AUTH_NETWORK', 'LIST_NETWORK', 'SIGN_NETWORK', 'AUTH_HTTP',
               'LIST_HTTP', 'SIGN_HTTP', 'AUTH_RESPONSE', 'LIST_RESPONSE',
               'SIGN_RESPONSE', 'LIST_REJECTED', 'LIST_SCHEMA', 'SIGN_REJECTED',
-              'SIGN_UNAVAILABLE', 'UNKNOWN'}
+              'SIGN_UNAVAILABLE', 'UNKNOWN', 'AUTH_REDIRECT_SAME', 'AUTH_REDIRECT_SLASH',
+              'AUTH_REDIRECT_OTHER_BAIDU', 'AUTH_REDIRECT_OTHER', 'AUTH_REDIRECT_MISSING'}
 
 def request(endpoint, bduss, fields=None):
     if endpoint not in ALLOWED:
@@ -45,6 +46,19 @@ def request(endpoint, bduss, fields=None):
     try:
         conn.request('POST' if body is not None else 'GET', path, body, headers)
         response = conn.getresponse()
+        if endpoint == TBS and response.status in (301, 302, 303, 307, 308):
+            location = response.getheader('Location')
+            if not location:
+                raise Stop('AUTH_REDIRECT_MISSING')
+            target = urlsplit(urljoin('https://' + host + path, location))
+            if target.scheme == 'https' and target.netloc == host:
+                if target.path == path + '/' and not target.query and not target.fragment:
+                    raise Stop('AUTH_REDIRECT_SLASH')
+                if target.path == path:
+                    raise Stop('AUTH_REDIRECT_SAME')
+            if target.scheme == 'https' and target.hostname and (target.hostname == 'baidu.com' or target.hostname.endswith('.baidu.com')):
+                raise Stop('AUTH_REDIRECT_OTHER_BAIDU')
+            raise Stop('AUTH_REDIRECT_OTHER')
         if response.status != 200:
             raise Stop(stage + '_HTTP', response.status)
         raw = response.read(4 * 1024 * 1024 + 1)
