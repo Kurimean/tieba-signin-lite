@@ -98,5 +98,34 @@ class Tests(unittest.TestCase):
             self.assertEqual(signin.main(), 1)
         self.assertEqual(buf.getvalue(), 'Task incomplete. Check your account manually.\n')
 
+    @patch('signin.run')
+    def test_confirmed_complete_skips_all_writes(self, run):
+        with patch.dict('os.environ', {'BDUSS': 'fake'}), patch('builtins.print'):
+            self.assertEqual(signin.main(verifier=lambda secret: 'SIGNED_REPORTED'), 0)
+        run.assert_not_called()
+
+    @patch('signin.run', side_effect=signin.Stop('SIGN_REJECTED'))
+    def test_rejected_but_complete_is_reconciled(self, run):
+        from unittest.mock import Mock
+        verifier = Mock(side_effect=['UNSIGNED_PRESENT', 'SIGNED_REPORTED'])
+        with patch.dict('os.environ', {'BDUSS': 'fake'}), patch('builtins.print'):
+            self.assertEqual(signin.main(diagnostic=True, verifier=verifier), 0)
+        run.assert_called_once_with('fake')
+        self.assertEqual(verifier.call_count, 2)
+
+    @patch('signin.run', side_effect=signin.Stop('SIGN_REJECTED'))
+    def test_partial_does_not_override_rejection(self, run):
+        with patch.dict('os.environ', {'BDUSS': 'fake'}), patch('builtins.print'):
+            self.assertEqual(signin.main(diagnostic=True, verifier=lambda secret: 'STATUS_PARTIAL'), 20)
+        run.assert_called_once_with('fake')
+
+    @patch('signin.run', side_effect=signin.Stop('AUTH_REJECTED'))
+    def test_auth_rejection_not_reconciled(self, run):
+        from unittest.mock import Mock
+        verifier = Mock(side_effect=['STATUS_UNKNOWN', 'SIGNED_REPORTED'])
+        with patch.dict('os.environ', {'BDUSS': 'fake'}):
+            self.assertEqual(signin.main(diagnostic=True, verifier=verifier), 11)
+        self.assertEqual(verifier.call_count, 1)
+
 if __name__ == '__main__':
     unittest.main()
