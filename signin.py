@@ -127,13 +127,12 @@ def run(bduss):
             incomplete = True
         elif status not in ('0', '160002'):
             raise Stop('SIGN_REJECTED')
-    if incomplete:
-        raise Stop('SIGN_UNAVAILABLE')
+    return incomplete
 
 
 def main():
     try:
-        run(os.environ.pop('BDUSS', ''))
+        skipped = run(os.environ.pop('BDUSS', ''))
     except Stop as exc:
         code = exc.code if exc.code in SAFE_CODES else 'UNKNOWN'
         if code in ('AUTH_HTTP', 'LIST_HTTP', 'SIGN_HTTP') and type(exc.status) is int and 100 <= exc.status <= 599:
@@ -143,7 +142,7 @@ def main():
     except Exception:
         print('Task incomplete. Check your account manually.')
         return 1
-    print('Task completed.')
+    print('Task completed for accessible forums. Some unavailable forums skipped.' if skipped else 'Task completed.')
     return 0
 
 if __name__ == '__main__':
