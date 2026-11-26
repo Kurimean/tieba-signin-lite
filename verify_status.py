@@ -4,13 +4,18 @@ import json
 import os
 import re
 import ssl
+import pathlib
+import sys
 from urllib.parse import urlencode
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import signin
 
 HOST = 'tieba.baidu.com'
 PATH = '/c/f/forum/forumGuide'
 
 
-def classify(data):
+def classify(data, expected_ids=None):
     if not isinstance(data, dict):
         return 'STATUS_UNKNOWN'
     if str(data.get('error_code', '')) != '0':
@@ -20,19 +25,31 @@ def classify(data):
     forums = data.get('like_forum')
     if not isinstance(forums, list) or not forums:
         return 'STATUS_UNKNOWN'
-    if any(not isinstance(f, dict) for f in forums):
-        return 'STATUS_UNKNOWN'
+    reported = {}
     for f in forums:
-        if str(f.get('is_forbidden', '0')) == '1':
-            continue
-        if str(f.get('is_sign', '')) == '0':
-            return 'UNSIGNED_PRESENT'
-    if data.get('like_forum_has_more') not in (False, 0, '0'):
+        if not isinstance(f, dict):
+            return 'STATUS_UNKNOWN'
+        fid = str(f.get('forum_id', ''))
+        if not fid.isdigit() or fid in reported:
+            return 'STATUS_UNKNOWN'
+        reported[fid] = f
+    if any(str(f.get('is_sign', '')) == '0' and
+           str(f.get('is_forbidden', '0')) != '1' for f in reported.values()):
+        return 'UNSIGNED_PRESENT'
+    if not expected_ids or set(reported) != set(expected_ids):
         return 'STATUS_PARTIAL'
-    accessible = [f for f in forums if str(f.get('is_forbidden', '0')) != '1']
+    accessible = [f for f in reported.values() if str(f.get('is_forbidden', '0')) != '1']
     if accessible and all(str(f.get('is_sign', '')) == '1' for f in accessible):
         return 'SIGNED_REPORTED'
     return 'STATUS_UNKNOWN'
+
+
+def read_expected(secret):
+    conn = http.client.HTTPSConnection(signin.LIKE[0], timeout=15, context=ssl.create_default_context())
+    try:
+        return set(signin.list_followed(secret, conn, strict=True))
+    finally:
+        conn.close()
 
 
 def check(secret):
@@ -56,7 +73,17 @@ def check(secret):
         raw = response.read(4 * 1024 * 1024 + 1)
         if len(raw) > 4 * 1024 * 1024:
             return 'STATUS_UNKNOWN'
-        return classify(json.loads(raw))
+        data = json.loads(raw)
+        preliminary = classify(data)
+        if preliminary != 'STATUS_PARTIAL':
+            return preliminary
+        conn.close()
+        conn = None
+        try:
+            expected = read_expected(secret)
+        except Exception:
+            return 'COVERAGE_UNKNOWN'
+        return classify(data, expected)
     except Exception:
         return 'STATUS_UNKNOWN'
     finally:
