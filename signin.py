@@ -29,11 +29,13 @@ SAFE_CODES = {'SECRET_MISSING', 'SECRET_FORMAT', 'AUTH_REJECTED', 'AUTH_SCHEMA',
               'SIGN_UNAVAILABLE', 'UNKNOWN', 'AUTH_REDIRECT_SAME', 'AUTH_REDIRECT_SLASH',
               'AUTH_REDIRECT_OTHER_BAIDU', 'AUTH_REDIRECT_OTHER', 'AUTH_REDIRECT_MISSING'}
 
-def request(endpoint, bduss, fields=None):
+def request(endpoint, bduss, fields=None, *, connection=None):
     if endpoint not in ALLOWED:
         raise Stop()
     stage = {TBS: 'AUTH', LIKE: 'LIST', SIGN: 'SIGN'}[endpoint]
     host, path = endpoint
+    if connection is not None and connection.host != host:
+        raise Stop()
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36', 'Cookie': 'BDUSS=' + bduss,
                'Accept': 'application/json'}
     body = None
@@ -43,7 +45,9 @@ def request(endpoint, bduss, fields=None):
         fields['sign'] = hashlib.md5((payload + 'tiebaclient!!!').encode()).hexdigest().upper()
         body = urlencode(fields).encode()
         headers['Content-Type'] = 'application/x-www-form-urlencoded'
-    conn = http.client.HTTPSConnection(host, timeout=15, context=ssl.create_default_context())
+    owns_connection = connection is None
+    conn = connection if connection is not None else http.client.HTTPSConnection(
+        host, timeout=15, context=ssl.create_default_context())
     try:
         conn.request('POST' if body is not None else 'GET', path, body, headers)
         response = conn.getresponse()
@@ -75,7 +79,8 @@ def request(endpoint, bduss, fields=None):
     except (OSError, http.client.HTTPException):
         raise Stop(stage + '_NETWORK') from None
     finally:
-        conn.close()
+        if owns_connection:
+            conn.close()
 
 
 def run(bduss):
@@ -83,7 +88,18 @@ def run(bduss):
         raise Stop('SECRET_MISSING')
     if not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', bduss):
         raise Stop('SECRET_FORMAT')
-    auth = request(TBS, bduss, {'_client_version': '22.15.1.0', 'bdusstoken': bduss})
+    # Each account has its own connection; HTTPConnection reconnects normally
+    # when the server explicitly closes it. Never replay ambiguous writes.
+    conn = http.client.HTTPSConnection(TBS[0], timeout=15, context=ssl.create_default_context())
+    try:
+        return run_connected(bduss, conn)
+    finally:
+        conn.close()
+
+
+def run_connected(bduss, conn):
+    auth = request(TBS, bduss, {'_client_version': '22.15.1.0', 'bdusstoken': bduss},
+                   connection=conn)
     if str(auth.get('error_code', '')) != '0':
         raise Stop('AUTH_REJECTED')
     anti = auth.get('anti')
@@ -94,7 +110,7 @@ def run(bduss):
     for page in range(1, 51):
         result = request(LIKE, bduss, dict(BASE, _client_id='wappc_1534235498291_488',
             **{'from': '1008621y'}, page_no=str(page), page_size='200',
-            timestamp=str(int(time.time())), vcode_tag='11'))
+            timestamp=str(int(time.time())), vcode_tag='11'), connection=conn)
         if str(result.get('error_code', '0')) != '0':
             raise Stop('LIST_REJECTED')
         if not isinstance(result.get('forum_list'), dict):
@@ -123,7 +139,7 @@ def run(bduss):
     for fid, name in forums.items():
         time.sleep(2)
         result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
-            timestamp=str(int(time.time()))))
+            timestamp=str(int(time.time()))), connection=conn)
         status = str(result.get('error_code', ''))
         if status == '340006':
             incomplete = True
