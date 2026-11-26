@@ -23,7 +23,7 @@ class Tests(unittest.TestCase):
     @patch('signin.time.sleep')
     @patch('signin.request')
     def test_success(self, req, sleep):
-        req.side_effect = [{'is_login': 1, 'tbs':'fake'},
+        req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
             {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}]}, 'has_more':'0'},
             {'error_code':'160002'}]
         signin.run('fake')
@@ -31,7 +31,7 @@ class Tests(unittest.TestCase):
 
     @patch('signin.request')
     def test_bad_login_stops(self, req):
-        req.return_value = {'is_login':0, 'tbs':'fake'}
+        req.return_value = {'error_code': 1}
         with self.assertRaises(signin.Stop):
             signin.run('fake')
         req.assert_called_once()
@@ -39,7 +39,7 @@ class Tests(unittest.TestCase):
     @patch('signin.time.sleep')
     @patch('signin.request')
     def test_unknown_status_stops(self, req, sleep):
-        req.side_effect = [{'is_login': 1, 'tbs':'fake'},
+        req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
             {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}},
             {'error_code':'unknown', 'error_msg':'private'}]
         with self.assertRaises(signin.Stop):
