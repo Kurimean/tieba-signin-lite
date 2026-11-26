@@ -118,6 +118,7 @@ def run(bduss):
     else:
         raise Stop('LIST_SCHEMA')
     incomplete = False
+    accessible = False
     for fid, name in forums.items():
         time.sleep(2)
         result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
@@ -127,6 +128,10 @@ def run(bduss):
             incomplete = True
         elif status not in ('0', '160002'):
             raise Stop('SIGN_REJECTED')
+        else:
+            accessible = True
+    if not accessible:
+        raise Stop('SIGN_UNAVAILABLE')
     return incomplete
 
 
