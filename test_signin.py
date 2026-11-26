@@ -46,6 +46,15 @@ class Tests(unittest.TestCase):
             signin.run('fake')
         self.assertEqual(req.call_count, 3)
 
+    @patch('signin.time.sleep')
+    @patch('signin.request')
+    def test_unavailable_forum_skipped(self, req, sleep):
+        req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
+            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}},
+            {'error_code':'340006'}, {'error_code':'0'}]
+        self.assertTrue(signin.run('fake'))
+        self.assertEqual(req.call_count, 4)
+
     @patch('signin.run', side_effect=ValueError('SECRET private forum'))
     def test_no_exception_leak(self, run):
         buf = io.StringIO()
