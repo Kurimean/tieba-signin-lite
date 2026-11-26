@@ -159,10 +159,28 @@ def list_followed(bduss, conn, *, strict=False):
     return forums
 
 
-def main(diagnostic=False):
+def confirmed_complete(verifier, secret):
+    if verifier is None or not secret:
+        return False
     try:
-        run(os.environ.pop('BDUSS', ''))
+        return verifier(secret) == 'SIGNED_REPORTED'
+    except Exception:
+        return False
+
+
+def main(diagnostic=False, verifier=None):
+    secret = os.environ.pop('BDUSS', '')
+    try:
+        if confirmed_complete(verifier, secret):
+            print('Task completed.')
+            return 0
+        run(secret)
     except Stop as exc:
+        # Reconcile an ambiguous sign rejection only against independent full
+        # read-only coverage. Never retry or treat a partial list as success.
+        if exc.code == 'SIGN_REJECTED' and confirmed_complete(verifier, secret):
+            print('Task completed.')
+            return 0
         if diagnostic:
             if exc.code in ('SECRET_MISSING', 'SECRET_FORMAT'):
                 return 10
@@ -194,4 +212,7 @@ def main(diagnostic=False):
     return 0
 
 if __name__ == '__main__':
-    raise SystemExit(main(sys.argv[1:] == ['--diagnose']))
+    import pathlib
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from verify_status import check
+    raise SystemExit(main(sys.argv[1:] == ['--diagnose'], verifier=check))
