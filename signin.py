@@ -16,8 +16,9 @@ BASE = {'_client_type': '2', '_client_version': '9.7.8.0',
         '_phone_imei': '000000000000000', 'model': 'MI+5', 'net_type': '1'}
 
 class Stop(Exception):
-    def __init__(self, code='UNKNOWN'):
+    def __init__(self, code='UNKNOWN', status=None):
         self.code = code
+        self.status = status
 
 
 SAFE_CODES = {'SECRET_MISSING', 'SECRET_FORMAT', 'AUTH_REJECTED', 'AUTH_SCHEMA',
@@ -45,7 +46,7 @@ def request(endpoint, bduss, fields=None):
         conn.request('POST' if body is not None else 'GET', path, body, headers)
         response = conn.getresponse()
         if response.status != 200:
-            raise Stop(stage + '_HTTP')
+            raise Stop(stage + '_HTTP', response.status)
         raw = response.read(4 * 1024 * 1024 + 1)
         if len(raw) > 4 * 1024 * 1024:
             raise Stop(stage + '_RESPONSE')
@@ -119,6 +120,8 @@ def main():
         run(os.environ.pop('BDUSS', ''))
     except Stop as exc:
         code = exc.code if exc.code in SAFE_CODES else 'UNKNOWN'
+        if code in ('AUTH_HTTP', 'LIST_HTTP', 'SIGN_HTTP') and type(exc.status) is int and 100 <= exc.status <= 599:
+            code += '_' + str(exc.status)
         print('Task incomplete. Diagnostic: ' + code)
         return 1
     except Exception:
