@@ -13,8 +13,10 @@ class Tests(unittest.TestCase):
     def test_redirect_fails(self, connect):
         conn = connect.return_value
         conn.getresponse.return_value.status = 302
-        with self.assertRaises(signin.Stop):
+        conn.getresponse.return_value.getheader.return_value = 'https://example.org/'
+        with self.assertRaises(signin.Stop) as exc:
             signin.request(signin.TBS, 'fake')
+        self.assertEqual(exc.exception.code, 'AUTH_REDIRECT_OTHER')
         connect.assert_called_once()
         conn.close.assert_called_once()
 
