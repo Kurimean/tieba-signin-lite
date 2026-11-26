@@ -106,6 +106,26 @@ def run_connected(bduss, conn):
     if not isinstance(anti, dict) or not isinstance(anti.get('tbs'), str) or not anti['tbs']:
         raise Stop('AUTH_SCHEMA')
     tbs = anti['tbs']
+    forums = list_followed(bduss, conn)
+    incomplete = False
+    accessible = False
+    for fid, name in forums.items():
+        time.sleep(2)
+        result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
+            timestamp=str(int(time.time()))), connection=conn)
+        status = str(result.get('error_code', ''))
+        if status == '340006':
+            incomplete = True
+        elif status not in ('0', '160002'):
+            raise Stop('SIGN_REJECTED')
+        else:
+            accessible = True
+    if not accessible:
+        raise Stop('SIGN_UNAVAILABLE')
+    return incomplete
+
+
+def list_followed(bduss, conn, *, strict=False):
     forums = {}
     for page in range(1, 51):
         result = request(LIKE, bduss, dict(BASE, _client_id='wappc_1534235498291_488',
@@ -126,6 +146,8 @@ def run_connected(bduss, conn):
                 if not fid.isdigit() or not isinstance(name, str) or not name:
                     raise Stop('LIST_SCHEMA')
                 forums[fid] = name
+        if strict and 'has_more' not in result:
+            raise Stop('LIST_SCHEMA')
         more = str(result.get('has_more', '0'))
         if more == '0':
             break
@@ -134,22 +156,7 @@ def run_connected(bduss, conn):
         time.sleep(2)
     else:
         raise Stop('LIST_SCHEMA')
-    incomplete = False
-    accessible = False
-    for fid, name in forums.items():
-        time.sleep(2)
-        result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
-            timestamp=str(int(time.time()))), connection=conn)
-        status = str(result.get('error_code', ''))
-        if status == '340006':
-            incomplete = True
-        elif status not in ('0', '160002'):
-            raise Stop('SIGN_REJECTED')
-        else:
-            accessible = True
-    if not accessible:
-        raise Stop('SIGN_UNAVAILABLE')
-    return incomplete
+    return forums
 
 
 def main(diagnostic=False):
