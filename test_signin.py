@@ -20,14 +20,40 @@ class Tests(unittest.TestCase):
         connect.assert_called_once()
         conn.close.assert_called_once()
 
+    @patch('signin.http.client.HTTPSConnection')
+    def test_connection_reused(self, connect):
+        conn = connect.return_value
+        conn.host = signin.TBS[0]
+        conn.getresponse.return_value.status = 200
+        conn.getresponse.return_value.read.return_value = b'{"error_code":"0"}'
+        for endpoint in (signin.TBS, signin.LIKE, signin.SIGN):
+            self.assertEqual(signin.request(endpoint, 'fake', {}, connection=conn),
+                             {'error_code': '0'})
+        connect.assert_not_called()
+        self.assertEqual(conn.request.call_count, 3)
+        conn.close.assert_not_called()
+
+    @patch('signin.http.client.HTTPSConnection')
+    def test_wrong_connection_host_rejected(self, connect):
+        conn = connect.return_value
+        conn.host = 'example.org'
+        with self.assertRaises(signin.Stop):
+            signin.request(signin.TBS, 'fake', {}, connection=conn)
+        conn.request.assert_not_called()
+
+    @patch('signin.http.client.HTTPSConnection')
     @patch('signin.time.sleep')
     @patch('signin.request')
-    def test_success(self, req, sleep):
+    def test_success(self, req, sleep, connect):
         req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
             {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}]}, 'has_more':'0'},
             {'error_code':'160002'}]
         signin.run('fake')
         self.assertEqual(req.call_count, 3)
+        connect.assert_called_once()
+        for call in req.call_args_list:
+            self.assertIs(call.kwargs['connection'], connect.return_value)
+        connect.return_value.close.assert_called_once()
 
     @patch('signin.request')
     def test_bad_login_stops(self, req):
