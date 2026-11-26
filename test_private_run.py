@@ -6,48 +6,60 @@ import unittest
 from unittest.mock import patch, Mock
 import private_run
 
+
 class PrivateRunTests(unittest.TestCase):
-    def simulate(self, duration, returncode=0, exception=None, secret='fake-credential'):
-        with patch.dict(os.environ, {'BDUSS': secret}, clear=False), \
-             patch('private_run.time.monotonic', side_effect=[1000, 1000+duration]), \
+    def simulate(self, first='fake-one', second='', outcomes=(0, 0)):
+        with patch.dict(os.environ, {'BDUSS': first, 'BDUSS_SECOND': second}, clear=False), \
+             patch('private_run.time.monotonic', side_effect=[1000, 1143, 1300, 1302]), \
              patch('private_run.time.sleep') as sleep, \
              patch('private_run.subprocess.run') as run:
-            if exception:
-                run.side_effect = exception
-            else:
-                run.return_value = Mock(returncode=returncode)
+            run.side_effect = [x if isinstance(x, Exception) else Mock(returncode=x) for x in outcomes]
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 result = private_run.main()
             self.assertNotIn('BDUSS', os.environ)
-            sleep.assert_called_once_with(max(0, 300-duration))
-            if secret:
-                kwargs = run.call_args.kwargs
+            self.assertNotIn('BDUSS_SECOND', os.environ)
+            self.assertEqual([c.args[0] for c in sleep.call_args_list], [157, 298])
+            expected = [s for s in (first, second if second != first else '') if s]
+            self.assertEqual(run.call_count, len(expected))
+            for call, secret in zip(run.call_args_list, expected):
+                kwargs = call.kwargs
                 self.assertEqual(kwargs['stdout'], subprocess.DEVNULL)
                 self.assertEqual(kwargs['stderr'], subprocess.DEVNULL)
                 self.assertEqual(kwargs['timeout'], 280)
-                self.assertEqual(kwargs['env']['BDUSS'], secret)
-                self.assertNotIn(secret, str(run.call_args.args))
-            else:
-                run.assert_not_called()
+                self.assertEqual(kwargs['env'], {'BDUSS': secret, 'PATH': os.defpath})
+                self.assertNotIn(secret, str(call.args))
             return result, buf.getvalue()
 
-    def test_success_is_padded(self):
-        self.assertEqual(self.simulate(143), (0, 'Task completed.\n'))
+    def test_one_account(self):
+        self.assertEqual(self.simulate(), (0, 'Task completed.\n'))
 
-    def test_failure_is_padded(self):
-        self.assertEqual(self.simulate(2, returncode=1), (1, 'Task incomplete.\n'))
+    def test_duplicate_fallback_not_signed_twice(self):
+        self.assertEqual(self.simulate(second='fake-one'), (0, 'Task completed.\n'))
 
-    def test_timeout_is_padded(self):
-        self.assertEqual(self.simulate(280, exception=subprocess.TimeoutExpired('private', 280)),
+    def test_two_accounts_isolated(self):
+        self.assertEqual(self.simulate(second='fake-two'), (0, 'Task completed.\n'))
+
+    def test_first_failure_does_not_skip_second(self):
+        self.assertEqual(self.simulate(second='fake-two', outcomes=(1, 0)), (1, 'Task incomplete.\n'))
+
+    def test_second_failure_is_aggregate_failure(self):
+        self.assertEqual(self.simulate(second='fake-two', outcomes=(0, 1)), (1, 'Task incomplete.\n'))
+
+    def test_timeout_does_not_leak(self):
+        self.assertEqual(self.simulate(second='fake-two', outcomes=(subprocess.TimeoutExpired('private', 280), 0)),
                          (1, 'Task incomplete.\n'))
 
     def test_exception_does_not_leak(self):
-        self.assertEqual(self.simulate(1, exception=ValueError('private credential')),
+        self.assertEqual(self.simulate(outcomes=(ValueError('private credential'),)),
                          (1, 'Task incomplete.\n'))
 
-    def test_missing_secret_is_padded(self):
-        self.assertEqual(self.simulate(0, secret=''), (1, 'Task incomplete.\n'))
+    def test_required_secret_missing(self):
+        self.assertEqual(self.simulate(first='', second='fake-two'), (1, 'Task incomplete.\n'))
+
+    def test_no_credentials(self):
+        self.assertEqual(self.simulate(first=''), (1, 'Task incomplete.\n'))
+
 
 if __name__ == '__main__':
     unittest.main()
