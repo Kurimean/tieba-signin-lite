@@ -48,6 +48,10 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(signin.main(diagnostic=True), 11)
         with patch('signin.run', side_effect=signin.Stop('SIGN_UNAVAILABLE')):
             self.assertEqual(signin.main(diagnostic=True), 14)
+        for category, code in [('SIGN_NETWORK', 17), ('SIGN_HTTP', 18), ('SIGN_RESPONSE', 19), ('SIGN_REJECTED', 20)]:
+            with patch('signin.run', side_effect=signin.Stop(category)):
+                self.assertEqual(signin.main(diagnostic=True), code)
+            self.assertEqual(self.simulate('one', 'two', [0, code]), (1, 'Validation incomplete. ' + category + '\n', 2))
 
 if __name__ == '__main__':
     unittest.main()
