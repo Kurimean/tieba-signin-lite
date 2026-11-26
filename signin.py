@@ -167,6 +167,14 @@ def main(diagnostic=False):
                 return 13
             if exc.code == 'SIGN_UNAVAILABLE':
                 return 14
+            if exc.code == 'SIGN_NETWORK':
+                return 17
+            if exc.code == 'SIGN_HTTP':
+                return 18
+            if exc.code == 'SIGN_RESPONSE':
+                return 19
+            if exc.code == 'SIGN_REJECTED':
+                return 20
             if exc.code.startswith('SIGN_'):
                 return 15
             return 16
