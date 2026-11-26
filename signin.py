@@ -5,6 +5,7 @@ import json
 import os
 import re
 import ssl
+import sys
 import time
 from urllib.parse import urlencode, urljoin, urlsplit
 
@@ -135,9 +136,26 @@ def run(bduss):
     return incomplete
 
 
-def main():
+def main(diagnostic=False):
     try:
         run(os.environ.pop('BDUSS', ''))
+    except Stop as exc:
+        if diagnostic:
+            if exc.code in ('SECRET_MISSING', 'SECRET_FORMAT'):
+                return 10
+            if exc.code == 'AUTH_REJECTED':
+                return 11
+            if exc.code.startswith('AUTH_'):
+                return 12
+            if exc.code.startswith('LIST_'):
+                return 13
+            if exc.code == 'SIGN_UNAVAILABLE':
+                return 14
+            if exc.code.startswith('SIGN_'):
+                return 15
+            return 16
+        print('Task incomplete. Check your account manually.')
+        return 1
     except Exception:
         print('Task incomplete. Check your account manually.')
         return 1
@@ -145,4 +163,4 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:] == ['--diagnose']))
