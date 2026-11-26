@@ -8,9 +8,9 @@ import ssl
 import time
 from urllib.parse import urlencode, urljoin, urlsplit
 
-TBS = ('tieba.baidu.com', '/dc/common/tbs')
-LIKE = ('c.tieba.baidu.com', '/c/f/forum/like')
-SIGN = ('c.tieba.baidu.com', '/c/c/forum/sign')
+TBS = ('tiebac.baidu.com', '/c/s/login')
+LIKE = ('tiebac.baidu.com', '/c/f/forum/like')
+SIGN = ('tiebac.baidu.com', '/c/c/forum/sign')
 ALLOWED = {TBS, LIKE, SIGN}
 BASE = {'_client_type': '2', '_client_version': '9.7.8.0',
         '_phone_imei': '000000000000000', 'model': 'MI+5', 'net_type': '1'}
@@ -82,11 +82,13 @@ def run(bduss):
         raise Stop('SECRET_MISSING')
     if not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', bduss):
         raise Stop('SECRET_FORMAT')
-    auth = request(TBS, bduss)
-    if str(auth.get('is_login')) == '0':
+    auth = request(TBS, bduss, {'_client_version': '22.15.1.0', 'bdusstoken': bduss})
+    if str(auth.get('error_code', '')) != '0':
         raise Stop('AUTH_REJECTED')
-    if str(auth.get('is_login')) != '1' or not isinstance(auth.get('tbs'), str) or not auth['tbs']:
+    anti = auth.get('anti')
+    if not isinstance(anti, dict) or not isinstance(anti.get('tbs'), str) or not anti['tbs']:
         raise Stop('AUTH_SCHEMA')
+    tbs = anti['tbs']
     forums = {}
     for page in range(1, 51):
         result = request(LIKE, bduss, dict(BASE, _client_id='wappc_1534235498291_488',
@@ -118,7 +120,7 @@ def run(bduss):
     incomplete = False
     for fid, name in forums.items():
         time.sleep(2)
-        result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=auth['tbs'],
+        result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
             timestamp=str(int(time.time()))))
         status = str(result.get('error_code', ''))
         if status == '340006':
