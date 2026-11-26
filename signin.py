@@ -99,7 +99,8 @@ def run(bduss):
             raise Stop('LIST_SCHEMA')
         time.sleep(2)
     else:
-        raise Stop('LIST_SCHEMA') = False
+        raise Stop('LIST_SCHEMA')
+    incomplete = False
     for fid, name in forums.items():
         time.sleep(2)
         result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=auth['tbs'],
