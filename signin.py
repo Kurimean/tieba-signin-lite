@@ -16,14 +16,22 @@ BASE = {'_client_type': '2', '_client_version': '9.7.8.0',
         '_phone_imei': '000000000000000', 'model': 'MI+5', 'net_type': '1'}
 
 class Stop(Exception):
-    pass
+    def __init__(self, code='UNKNOWN'):
+        self.code = code
 
+
+SAFE_CODES = {'SECRET_MISSING', 'SECRET_FORMAT', 'AUTH_REJECTED', 'AUTH_SCHEMA',
+              'AUTH_NETWORK', 'LIST_NETWORK', 'SIGN_NETWORK', 'AUTH_HTTP',
+              'LIST_HTTP', 'SIGN_HTTP', 'AUTH_RESPONSE', 'LIST_RESPONSE',
+              'SIGN_RESPONSE', 'LIST_REJECTED', 'LIST_SCHEMA', 'SIGN_REJECTED',
+              'SIGN_UNAVAILABLE', 'UNKNOWN'}
 
 def request(endpoint, bduss, fields=None):
     if endpoint not in ALLOWED:
         raise Stop()
+    stage = {TBS: 'AUTH', LIKE: 'LIST', SIGN: 'SIGN'}[endpoint]
     host, path = endpoint
-    headers = {'User-Agent': 'Mozilla/5.0', 'Cookie': 'BDUSS=' + bduss,
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36', 'Cookie': 'BDUSS=' + bduss,
                'Accept': 'application/json'}
     body = None
     if fields is not None:
@@ -37,51 +45,61 @@ def request(endpoint, bduss, fields=None):
         conn.request('POST' if body is not None else 'GET', path, body, headers)
         response = conn.getresponse()
         if response.status != 200:
-            raise Stop()
+            raise Stop(stage + '_HTTP')
         raw = response.read(4 * 1024 * 1024 + 1)
         if len(raw) > 4 * 1024 * 1024:
-            raise Stop()
-        result = json.loads(raw)
+            raise Stop(stage + '_RESPONSE')
+        try:
+            result = json.loads(raw)
+        except (ValueError, UnicodeError):
+            raise Stop(stage + '_RESPONSE') from None
         if not isinstance(result, dict):
-            raise Stop()
+            raise Stop(stage + '_RESPONSE')
         return result
+    except (OSError, http.client.HTTPException):
+        raise Stop(stage + '_NETWORK') from None
     finally:
         conn.close()
 
 
 def run(bduss):
-    if not bduss or not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', bduss):
-        raise Stop()
+    if not bduss:
+        raise Stop('SECRET_MISSING')
+    if not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', bduss):
+        raise Stop('SECRET_FORMAT')
     auth = request(TBS, bduss)
+    if str(auth.get('is_login')) == '0':
+        raise Stop('AUTH_REJECTED')
     if str(auth.get('is_login')) != '1' or not isinstance(auth.get('tbs'), str) or not auth['tbs']:
-        raise Stop()
+        raise Stop('AUTH_SCHEMA')
     forums = {}
     for page in range(1, 51):
         result = request(LIKE, bduss, dict(BASE, _client_id='wappc_1534235498291_488',
             **{'from': '1008621y'}, page_no=str(page), page_size='200',
             timestamp=str(int(time.time())), vcode_tag='11'))
-        if str(result.get('error_code', '0')) != '0' or not isinstance(result.get('forum_list'), dict):
-            raise Stop()
+        if str(result.get('error_code', '0')) != '0':
+            raise Stop('LIST_REJECTED')
+        if not isinstance(result.get('forum_list'), dict):
+            raise Stop('LIST_SCHEMA')
         for kind in ('non-gconforum', 'gconforum'):
             items = result['forum_list'].get(kind, [])
             if isinstance(items, dict):
                 items = [items]
             if not isinstance(items, list):
-                raise Stop()
+                raise Stop('LIST_SCHEMA')
             for item in items:
                 fid, name = str(item['id']), item['name']
                 if not fid.isdigit() or not isinstance(name, str) or not name:
-                    raise Stop()
+                    raise Stop('LIST_SCHEMA')
                 forums[fid] = name
         more = str(result.get('has_more', '0'))
         if more == '0':
             break
         if more != '1':
-            raise Stop()
+            raise Stop('LIST_SCHEMA')
         time.sleep(2)
     else:
-        raise Stop()
-    incomplete = False
+        raise Stop('LIST_SCHEMA') = False
     for fid, name in forums.items():
         time.sleep(2)
         result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=auth['tbs'],
@@ -90,14 +108,18 @@ def run(bduss):
         if status == '340006':
             incomplete = True
         elif status not in ('0', '160002'):
-            raise Stop()
+            raise Stop('SIGN_REJECTED')
     if incomplete:
-        raise Stop()
+        raise Stop('SIGN_UNAVAILABLE')
 
 
 def main():
     try:
         run(os.environ.pop('BDUSS', ''))
+    except Stop as exc:
+        code = exc.code if exc.code in SAFE_CODES else 'UNKNOWN'
+        print('Task incomplete. Diagnostic: ' + code)
+        return 1
     except Exception:
         print('Task incomplete. Check your account manually.')
         return 1
