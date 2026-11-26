@@ -8,9 +8,6 @@ on:
         description: Run without privacy time padding
         type: boolean
         default: true
-  push:
-    branches: [main]
-    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
   group: daily-task
@@ -39,7 +36,7 @@ jobs:
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND || secrets.BDUSS }}
         run: python3 -I -B private_run.py
       - name: Fast validation
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.fast_validation)
+        if: github.event_name == 'workflow_dispatch' && inputs.fast_validation
         env:
           BDUSS: ${{ secrets.BDUSS }}
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
