@@ -7,21 +7,37 @@ import verify_status as v
 
 
 class StatusTests(unittest.TestCase):
-    def status(self, entries, more=False):
+    def status(self, entries, expected=None):
         return v.classify({'error_code': 0, 'is_login': 1,
-                           'like_forum': entries, 'like_forum_has_more': more})
+                           'like_forum': entries}, expected)
 
     def test_complete(self):
-        self.assertEqual(self.status([{'is_sign': 1}, {'is_forbidden': 1}]), 'SIGNED_REPORTED')
+        self.assertEqual(self.status([{'forum_id': 1, 'is_sign': 1},
+                                      {'forum_id': 2, 'is_forbidden': 1}], {'1', '2'}), 'SIGNED_REPORTED')
 
     def test_incomplete(self):
-        self.assertEqual(self.status([{'is_sign': 0}]), 'UNSIGNED_PRESENT')
+        self.assertEqual(self.status([{'forum_id': 1, 'is_sign': 0}]), 'UNSIGNED_PRESENT')
 
     def test_partial_list_cannot_pass(self):
-        self.assertEqual(self.status([{'is_sign': 1}], True), 'STATUS_PARTIAL')
+        self.assertEqual(self.status([{'forum_id': 1, 'is_sign': 1}], {'1', '2'}), 'STATUS_PARTIAL')
+
+    def test_missing_coverage_cannot_pass(self):
+        self.assertEqual(self.status([{'forum_id': 1, 'is_sign': 1}]), 'STATUS_PARTIAL')
 
     def test_unknown_flag_cannot_pass(self):
-        self.assertEqual(self.status([{}]), 'STATUS_UNKNOWN')
+        self.assertEqual(self.status([{'forum_id': 1}], {'1'}), 'STATUS_UNKNOWN')
+
+    def test_duplicate_id_cannot_pass(self):
+        self.assertEqual(self.status([{'forum_id': 1, 'is_sign': 1},
+                                      {'forum_id': 1, 'is_sign': 1}], {'1'}), 'STATUS_UNKNOWN')
+
+    @patch('verify_status.signin.request')
+    @patch('verify_status.http.client.HTTPSConnection')
+    def test_coverage_never_signs(self, connect, req):
+        req.return_value = {'error_code': 0, 'forum_list': {'non-gconforum': [
+            {'id': '1', 'name': 'private'}]}, 'has_more': '0'}
+        self.assertEqual(v.read_expected('fake'), {'1'})
+        self.assertEqual(req.call_args.args[0], v.signin.LIKE)
 
     def test_rejected(self):
         self.assertEqual(v.classify({'error_code': 1}), 'STATUS_REJECTED')
