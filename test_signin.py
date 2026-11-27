@@ -66,7 +66,7 @@ class Tests(unittest.TestCase):
     @patch('signin.request')
     def test_unknown_status_stops(self, req, sleep):
         req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
-            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}},
+            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}, 'has_more':'0'},
             {'error_code':'unknown', 'error_msg':'private'}]
         with self.assertRaises(signin.Stop):
             signin.run('fake')
@@ -76,7 +76,7 @@ class Tests(unittest.TestCase):
     @patch('signin.request')
     def test_unavailable_forum_skipped(self, req, sleep):
         req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
-            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}},
+            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}, {'id':'2','name':'private2'}]}, 'has_more':'0'},
             {'error_code':'340006'}, {'error_code':'0'}]
         self.assertTrue(signin.run('fake'))
         self.assertEqual(req.call_count, 4)
@@ -85,7 +85,7 @@ class Tests(unittest.TestCase):
     @patch('signin.request')
     def test_all_unavailable_fails(self, req, sleep):
         req.side_effect = [{'error_code': 0, 'anti': {'tbs':'fake'}},
-            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}]}},
+            {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}]}, 'has_more':'0'},
             {'error_code':'340006'}]
         with self.assertRaises(signin.Stop) as exc:
             signin.run('fake')
@@ -126,6 +126,33 @@ class Tests(unittest.TestCase):
         with patch.dict('os.environ', {'BDUSS': 'fake'}):
             self.assertEqual(signin.main(diagnostic=True, verifier=verifier), 11)
         self.assertEqual(verifier.call_count, 1)
+
+    @patch('signin.time.sleep')
+    @patch('signin.request')
+    def test_skip_confirmed_signed_forum(self, req, sleep):
+        req.side_effect = [{'error_code': 0, 'anti': {'tbs': 'fake'}},
+            {'forum_list': {'non-gconforum': [{'id':'1','name':'private'},
+                {'id':'2','name':'private2'}]}, 'has_more':'0'},
+            {'error_code': '0'}]
+        self.assertFalse(signin.run('fake', already_signed={'1', '99'}))
+        self.assertEqual(req.call_count, 3)
+        self.assertEqual(req.call_args.args[2]['fid'], '2')
+        sleep.assert_called_once_with(2)
+
+    @patch('signin.run')
+    def test_snapshot_passes_signed_ids(self, run):
+        with patch.dict('os.environ', {'BDUSS':'fake'}), patch('builtins.print'):
+            self.assertEqual(signin.main(snapshot_reader=lambda s: ('UNSIGNED_PRESENT', {'1'})), 0)
+        run.assert_called_once_with('fake', already_signed={'1'})
+
+    @patch('signin.request')
+    def test_missing_pagination_stops_before_signing(self, req):
+        req.side_effect = [{'error_code':0,'anti':{'tbs':'fake'}},
+                           {'forum_list': {'non-gconforum':[{'id':'1','name':'private'}]}}]
+        with self.assertRaises(signin.Stop) as exc:
+            signin.run('fake')
+        self.assertEqual(exc.exception.code, 'LIST_SCHEMA')
+        self.assertEqual(req.call_count, 2)
 
 if __name__ == '__main__':
     unittest.main()
