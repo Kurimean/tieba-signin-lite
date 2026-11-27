@@ -19,14 +19,15 @@ class PrivateRunTests(unittest.TestCase):
                 result = private_run.main()
             self.assertNotIn('BDUSS', os.environ)
             self.assertNotIn('BDUSS_SECOND', os.environ)
-            self.assertEqual([c.args[0] for c in sleep.call_args_list], [787, 928])
+            self.assertEqual([c.args[0] for c in sleep.call_args_list], [157, 298])
             expected = [s for s in (first, second if second != first else '') if s]
             self.assertEqual(run.call_count, len(expected))
             for call, secret in zip(run.call_args_list, expected):
                 kwargs = call.kwargs
                 self.assertEqual(kwargs['stdout'], subprocess.DEVNULL)
                 self.assertEqual(kwargs['stderr'], subprocess.DEVNULL)
-                self.assertEqual(kwargs['timeout'], 900)
+                self.assertEqual(kwargs['timeout'], 280)
+                self.assertTrue(call.args[0][-1].endswith('/batch_signin.py'))
                 self.assertEqual(kwargs['env'], {'BDUSS': secret, 'PATH': os.defpath})
                 self.assertNotIn(secret, str(call.args))
             return result, buf.getvalue()
@@ -47,7 +48,7 @@ class PrivateRunTests(unittest.TestCase):
         self.assertEqual(self.simulate(second='fake-two', outcomes=(0, 1)), (1, 'Task incomplete.\n'))
 
     def test_timeout_does_not_leak(self):
-        self.assertEqual(self.simulate(second='fake-two', outcomes=(subprocess.TimeoutExpired('private', 900), 0)),
+        self.assertEqual(self.simulate(second='fake-two', outcomes=(subprocess.TimeoutExpired('private', 280), 0)),
                          (1, 'Task incomplete.\n'))
 
     def test_exception_does_not_leak(self):
