@@ -10,9 +10,6 @@ on:
         description: Run without privacy time padding
         type: boolean
         default: true
-  push:
-    branches: [main]
-    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
   group: daily-task
@@ -46,9 +43,3 @@ jobs:
           BDUSS: ${{ secrets.BDUSS }}
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
         run: python3 -I -B validate_run.py
-      - name: One-click sign-in validation
-        if: github.event_name == 'push'
-        env:
-          BDUSS: ${{ secrets.BDUSS }}
-          BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
-        run: python3 -I -B validate_run.py --batch
