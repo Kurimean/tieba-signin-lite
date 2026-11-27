@@ -179,12 +179,21 @@ def main(diagnostic=False, verifier=None, snapshot_reader=None):
             if state == 'SIGNED_REPORTED':
                 print('Task completed.')
                 return 0
-            run(secret, already_signed=signed)
+            if state not in ('UNSIGNED_PRESENT', 'STATUS_PARTIAL'):
+                raise Stop('STATUS_PRECHECK')
+            incomplete = run(secret, already_signed=signed)
         else:
             if confirmed_complete(verifier, secret):
                 print('Task completed.')
                 return 0
-            run(secret)
+            incomplete = run(secret)
+        # A successful write response alone does not prove today's final state.
+        if verifier is not None or snapshot_reader is not None:
+            final_verifier = verifier if verifier is not None else lambda value: snapshot_reader(value)[0]
+            if not confirmed_complete(final_verifier, secret):
+                raise Stop('STATUS_POSTCHECK')
+        elif incomplete:
+            raise Stop('STATUS_POSTCHECK')
     except Stop as exc:
         # Reconcile an ambiguous sign rejection only against independent full
         # read-only coverage. Never retry or treat a partial list as success.
@@ -202,6 +211,10 @@ def main(diagnostic=False, verifier=None, snapshot_reader=None):
                 return 13
             if exc.code == 'SIGN_UNAVAILABLE':
                 return 14
+            if exc.code == 'STATUS_POSTCHECK':
+                return 26
+            if exc.code == 'STATUS_PRECHECK':
+                return 27
             if exc.code == 'SIGN_NETWORK':
                 return 17
             if exc.code == 'SIGN_HTTP':
