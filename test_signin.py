@@ -142,7 +142,7 @@ class Tests(unittest.TestCase):
     @patch('signin.run')
     def test_snapshot_passes_signed_ids(self, run):
         with patch.dict('os.environ', {'BDUSS':'fake'}), patch('builtins.print'):
-            self.assertEqual(signin.main(snapshot_reader=lambda s: ('UNSIGNED_PRESENT', {'1'})), 0)
+            self.assertEqual(signin.main(snapshot_reader=lambda s: ('UNSIGNED_PRESENT', {'1'}), verifier=lambda s: 'SIGNED_REPORTED'), 0)
         run.assert_called_once_with('fake', already_signed={'1'})
 
     @patch('signin.request')
@@ -153,6 +153,23 @@ class Tests(unittest.TestCase):
             signin.run('fake')
         self.assertEqual(exc.exception.code, 'LIST_SCHEMA')
         self.assertEqual(req.call_count, 2)
+
+    @patch('signin.run', return_value=False)
+    def test_write_success_without_full_confirmation_fails(self, run):
+        with patch.dict('os.environ', {'BDUSS':'fake'}):
+            self.assertEqual(signin.main(diagnostic=True, snapshot_reader=lambda s: ('UNSIGNED_PRESENT', {'1'}), verifier=lambda s: 'UNSIGNED_PRESENT'), 26)
+        run.assert_called_once()
+
+    @patch('signin.run')
+    def test_unavailable_precheck_stops_writes(self, run):
+        with patch.dict('os.environ', {'BDUSS':'fake'}):
+            self.assertEqual(signin.main(diagnostic=True, snapshot_reader=lambda s: ('STATUS_AUTH_UNKNOWN', set())), 27)
+        run.assert_not_called()
+
+    @patch('signin.run', return_value=True)
+    def test_incomplete_without_verifier_fails(self, run):
+        with patch.dict('os.environ', {'BDUSS':'fake'}):
+            self.assertEqual(signin.main(diagnostic=True), 26)
 
 if __name__ == '__main__':
     unittest.main()
