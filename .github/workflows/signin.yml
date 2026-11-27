@@ -10,6 +10,9 @@ on:
         description: Run without privacy time padding
         type: boolean
         default: true
+  push:
+    branches: [main]
+    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
   group: daily-task
@@ -30,7 +33,7 @@ jobs:
           git fetch --quiet --depth=1 origin "$REVISION"
           git checkout --quiet --detach FETCH_HEAD
       - name: Run offline tests
-        run: python3 -B -m unittest -q test_signin test_private_run test_validate_run test_verify_status
+        run: python3 -B -m unittest -q test_signin test_private_run test_validate_run test_verify_status test_batch_signin
       - name: Daily task
         if: (github.event_name == 'schedule' && github.event.schedule == '37 22 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.fast_validation)
         env:
@@ -43,3 +46,9 @@ jobs:
           BDUSS: ${{ secrets.BDUSS }}
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
         run: python3 -I -B validate_run.py
+      - name: One-click sign-in validation
+        if: github.event_name == 'push'
+        env:
+          BDUSS: ${{ secrets.BDUSS }}
+          BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
+        run: python3 -I -B validate_run.py --batch
