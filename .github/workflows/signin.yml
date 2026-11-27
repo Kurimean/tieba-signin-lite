@@ -1,13 +1,18 @@
 name: Daily task
 on:
   schedule:
-    - cron: '30 22 * * *'
+    - cron: '37 22 * * *'
+    # Temporary credential-free scheduler probe; remove after verification.
+    - cron: '47 * * * *'
   workflow_dispatch:
     inputs:
       fast_validation:
         description: Run without privacy time padding
         type: boolean
         default: true
+  push:
+    branches: [main]
+    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
   group: daily-task
@@ -30,13 +35,13 @@ jobs:
       - name: Run offline tests
         run: python3 -B -m unittest -q test_signin test_private_run test_validate_run test_verify_status
       - name: Daily task
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fast_validation)
+        if: (github.event_name == 'schedule' && github.event.schedule == '37 22 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.fast_validation)
         env:
           BDUSS: ${{ secrets.BDUSS }}
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND || secrets.BDUSS }}
         run: python3 -I -B private_run.py
       - name: Fast validation
-        if: github.event_name == 'workflow_dispatch' && inputs.fast_validation
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.fast_validation)
         env:
           BDUSS: ${{ secrets.BDUSS }}
           BDUSS_SECOND: ${{ secrets.BDUSS_SECOND }}
