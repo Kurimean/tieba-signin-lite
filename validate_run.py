@@ -12,14 +12,15 @@ CATEGORIES = {
     21: 'SIGN_SERVER_1102', 22: 'SIGN_SERVER_1989', 23: 'SIGN_SERVER_2150040',
     24: 'SIGN_SERVER_2280007', 25: 'SIGN_SERVER_540002',
     26: 'STATUS_POSTCHECK_INCOMPLETE', 27: 'STATUS_PRECHECK_UNAVAILABLE',
+    28: 'BATCH_SERVER_340011',
 }
 TIMEOUT_SECONDS = 900
 
 
-def check(secret):
+def check(secret, *, batch=False):
     try:
         result = subprocess.run(
-            [sys.executable, '-I', '-B', str(pathlib.Path(__file__).resolve().with_name('signin.py')), '--diagnose'],
+            [sys.executable, '-I', '-B', str(pathlib.Path(__file__).resolve().with_name('batch_signin.py' if batch else 'signin.py')), '--diagnose'],
             env={'BDUSS': secret, 'PATH': os.defpath},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=TIMEOUT_SECONDS, check=False,
@@ -31,13 +32,13 @@ def check(secret):
         return 'UNEXPECTED'
 
 
-def main():
+def main(batch=False):
     first = os.environ.pop('BDUSS', '')
     second = os.environ.pop('BDUSS_SECOND', '')
     if not first or not second or first == second:
         print('Validation incomplete. CREDENTIAL_CONFIGURATION')
         return 1
-    outcomes = {check(first), check(second)}
+    outcomes = {check(first, batch=batch), check(second, batch=batch)}
     first = second = None
     if outcomes == {'OK'}:
         print('Validation completed.')
@@ -47,4 +48,4 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(main(batch=sys.argv[1:] == ['--batch']))
