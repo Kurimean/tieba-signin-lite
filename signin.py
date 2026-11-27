@@ -120,7 +120,7 @@ def run_connected(bduss, conn, already_signed=None):
         if status == '340006':
             incomplete = True
         elif status not in ('0', '160002'):
-            raise Stop('SIGN_REJECTED')
+            raise Stop('SIGN_REJECTED', status if status in ('1102', '1989', '2150040', '2280007', '540002') else None)
         else:
             accessible = True
     if not accessible:
@@ -209,7 +209,7 @@ def main(diagnostic=False, verifier=None, snapshot_reader=None):
             if exc.code == 'SIGN_RESPONSE':
                 return 19
             if exc.code == 'SIGN_REJECTED':
-                return 20
+                return {'1102':21, '1989':22, '2150040':23, '2280007':24, '540002':25}.get(exc.status, 20)
             if exc.code.startswith('SIGN_'):
                 return 15
             return 16
