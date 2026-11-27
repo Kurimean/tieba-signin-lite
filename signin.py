@@ -83,7 +83,7 @@ def request(endpoint, bduss, fields=None, *, connection=None):
             conn.close()
 
 
-def run(bduss):
+def run(bduss, already_signed=None):
     if not bduss:
         raise Stop('SECRET_MISSING')
     if not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', bduss):
@@ -92,12 +92,12 @@ def run(bduss):
     # when the server explicitly closes it. Never replay ambiguous writes.
     conn = http.client.HTTPSConnection(TBS[0], timeout=15, context=ssl.create_default_context())
     try:
-        return run_connected(bduss, conn)
+        return run_connected(bduss, conn, already_signed)
     finally:
         conn.close()
 
 
-def run_connected(bduss, conn):
+def run_connected(bduss, conn, already_signed=None):
     auth = request(TBS, bduss, {'_client_version': '22.15.1.0', 'bdusstoken': bduss},
                    connection=conn)
     if str(auth.get('error_code', '')) != '0':
@@ -106,10 +106,13 @@ def run_connected(bduss, conn):
     if not isinstance(anti, dict) or not isinstance(anti.get('tbs'), str) or not anti['tbs']:
         raise Stop('AUTH_SCHEMA')
     tbs = anti['tbs']
-    forums = list_followed(bduss, conn)
+    forums = list_followed(bduss, conn, strict=True)
+    confirmed = set(already_signed or ()) & set(forums)
     incomplete = False
-    accessible = False
+    accessible = bool(confirmed)
     for fid, name in forums.items():
+        if fid in confirmed:
+            continue
         time.sleep(2)
         result = request(SIGN, bduss, dict(BASE, fid=fid, kw=name, tbs=tbs,
             timestamp=str(int(time.time()))), connection=conn)
@@ -168,13 +171,20 @@ def confirmed_complete(verifier, secret):
         return False
 
 
-def main(diagnostic=False, verifier=None):
+def main(diagnostic=False, verifier=None, snapshot_reader=None):
     secret = os.environ.pop('BDUSS', '')
     try:
-        if confirmed_complete(verifier, secret):
-            print('Task completed.')
-            return 0
-        run(secret)
+        if snapshot_reader is not None:
+            state, signed = snapshot_reader(secret)
+            if state == 'SIGNED_REPORTED':
+                print('Task completed.')
+                return 0
+            run(secret, already_signed=signed)
+        else:
+            if confirmed_complete(verifier, secret):
+                print('Task completed.')
+                return 0
+            run(secret)
     except Stop as exc:
         # Reconcile an ambiguous sign rejection only against independent full
         # read-only coverage. Never retry or treat a partial list as success.
@@ -214,5 +224,5 @@ def main(diagnostic=False, verifier=None):
 if __name__ == '__main__':
     import pathlib
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-    from verify_status import check
-    raise SystemExit(main(sys.argv[1:] == ['--diagnose'], verifier=check))
+    from verify_status import check, snapshot
+    raise SystemExit(main(sys.argv[1:] == ['--diagnose'], verifier=check, snapshot_reader=snapshot))
