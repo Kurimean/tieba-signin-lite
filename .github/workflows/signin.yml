@@ -10,9 +10,6 @@ on:
         description: Run without privacy time padding
         type: boolean
         default: true
-  push:
-    branches: [main]
-    paths: ['.github/workflows/signin.yml']
 permissions: {}
 concurrency:
   group: daily-task
