@@ -2,8 +2,6 @@ name: Daily task
 on:
   schedule:
     - cron: '37 22 * * *'
-    # Temporary credential-free scheduler probe; remove after verification.
-    - cron: '47 * * * *'
   workflow_dispatch:
     inputs:
       fast_validation:
