@@ -5,8 +5,8 @@ import subprocess
 import sys
 import time
 
-WINDOW_SECONDS = 930
-WORK_LIMIT_SECONDS = 900
+WINDOW_SECONDS = 300
+WORK_LIMIT_SECONDS = 280
 
 
 def run_slot(secret, required=False):
@@ -15,7 +15,7 @@ def run_slot(secret, required=False):
     try:
         if secret:
             result = subprocess.run(
-                [sys.executable, '-I', '-B', str(pathlib.Path(__file__).resolve().with_name('signin.py'))],
+                [sys.executable, '-I', '-B', str(pathlib.Path(__file__).resolve().with_name('batch_signin.py'))],
                 env={'BDUSS': secret, 'PATH': os.defpath},
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 timeout=WORK_LIMIT_SECONDS, check=False,
