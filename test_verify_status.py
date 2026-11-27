@@ -60,5 +60,13 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(check.call_count, 2)
 
 
+    def test_signed_ids_only_from_authenticated_status(self):
+        data = {'error_code': 0, 'is_login': 1, 'like_forum': [
+            {'forum_id': 1, 'is_sign': 1}, {'forum_id': 2, 'is_sign': 0},
+            {'forum_id': 3, 'is_sign': 1, 'is_forbidden': 1}]}
+        self.assertEqual(v.signed_ids(data), {'1'})
+        data['is_login'] = 0
+        self.assertEqual(v.signed_ids(data), set())
+
 if __name__ == '__main__':
     unittest.main()
