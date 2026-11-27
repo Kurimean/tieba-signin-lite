@@ -52,9 +52,9 @@ def read_expected(secret):
         conn.close()
 
 
-def check(secret):
+def read_status(secret):
     if not secret or not re.fullmatch(r'[A-Za-z0-9_~.%+/=\-]+', secret):
-        return 'CREDENTIAL_CONFIGURATION'
+        return None, 'CREDENTIAL_CONFIGURATION'
     conn = None
     try:
         conn = http.client.HTTPSConnection(HOST, timeout=15, context=ssl.create_default_context())
@@ -69,26 +69,43 @@ def check(secret):
         })
         response = conn.getresponse()
         if response.status != 200:
-            return 'STATUS_HTTP'
+            return None, 'STATUS_HTTP'
         raw = response.read(4 * 1024 * 1024 + 1)
         if len(raw) > 4 * 1024 * 1024:
-            return 'STATUS_UNKNOWN'
-        data = json.loads(raw)
-        preliminary = classify(data)
-        if preliminary != 'STATUS_PARTIAL':
-            return preliminary
-        conn.close()
-        conn = None
-        try:
-            expected = read_expected(secret)
-        except Exception:
-            return 'COVERAGE_UNKNOWN'
-        return classify(data, expected)
+            return None, 'STATUS_UNKNOWN'
+        return json.loads(raw), None
     except Exception:
-        return 'STATUS_UNKNOWN'
+        return None, 'STATUS_UNKNOWN'
     finally:
         if conn is not None:
             conn.close()
+
+
+def signed_ids(data):
+    # Accept only explicit signed flags from authenticated, well-formed data.
+    if classify(data) not in ('STATUS_PARTIAL', 'UNSIGNED_PRESENT'):
+        return set()
+    return {str(f['forum_id']) for f in data['like_forum']
+            if str(f.get('is_sign', '')) == '1' and str(f.get('is_forbidden', '0')) != '1'}
+
+
+def snapshot(secret):
+    data, error = read_status(secret)
+    if error:
+        return error, set()
+    preliminary = classify(data)
+    ids = signed_ids(data)
+    if preliminary != 'STATUS_PARTIAL':
+        return preliminary, ids
+    try:
+        expected = read_expected(secret)
+    except Exception:
+        return 'COVERAGE_UNKNOWN', ids
+    return classify(data, expected), ids
+
+
+def check(secret):
+    return snapshot(secret)[0]
 
 
 def main():
