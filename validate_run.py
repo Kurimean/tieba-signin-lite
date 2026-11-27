@@ -23,7 +23,7 @@ def check(secret, *, batch=False):
             [sys.executable, '-I', '-B', str(pathlib.Path(__file__).resolve().with_name('batch_signin.py' if batch else 'signin.py')), '--diagnose'],
             env={'BDUSS': secret, 'PATH': os.defpath},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=TIMEOUT_SECONDS, check=False,
+            timeout=280 if batch else TIMEOUT_SECONDS, check=False,
         )
         return CATEGORIES.get(result.returncode, 'UNEXPECTED')
     except subprocess.TimeoutExpired:
